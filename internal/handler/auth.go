@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"payslip-generation-system/internal/model"
 	"payslip-generation-system/utils"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -18,32 +18,38 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
-func LoginHandler(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
+func LoginHandler(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		var req LoginRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
 
 		var user model.User
 		err := db.Where("username = ?", req.Username).First(&user).Error
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
 
 		if !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
 
 		token, err := utils.GenerateToken(user.ID.String(), user.Role)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+			http.Error(w, "failed to generate token", http.StatusInternalServerError)
 			return
 		}
 
-		c.JSON(http.StatusOK, LoginResponse{Token: token})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(LoginResponse{Token: token})
 	}
 }
