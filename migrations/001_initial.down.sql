@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS payslips;
+DROP TABLE IF EXISTS payrolls;
+DROP TABLE IF EXISTS reimbursements;
+DROP TABLE IF EXISTS overtimes;
+DROP TABLE IF EXISTS attendances;
+DROP TABLE IF EXISTS attendance_periods;
+DROP TABLE IF EXISTS users;
+DROP EXTENSION IF EXISTS "uuid-ossp";
