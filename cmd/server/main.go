@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"payslip-generation-system/internal/handler"
+	"payslip-generation-system/internal/middleware"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
@@ -25,15 +26,18 @@ func main() {
 
 	http.HandleFunc("/login", handler.LoginHandler(db))
 
-	// admin := r.Group("/admin")
-	// admin.Use(middleware.AuthMiddleware())
-	// admin.POST("/attendance-period", handler.CreateAttendancePeriodHandler(db))
+	// admin router
+	adminMux := http.NewServeMux()
+	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(handler.CreateAttendancePeriodHandler(db))))
 
-	// employee := r.Group("/employee")
-	// employee.Use(middleware.AuthMiddleware())
-	// employee.POST("/attendance", handler.SubmitAttendanceHanlder(db))
-	// employee.POST("/overtime", handler.SubmitOvertimeHandler(db))
-	// employee.POST("/reimbursement", handler.SubmitReimbursementHandler(db))
+	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
+
+	// employee router
+	employeeMux := http.NewServeMux()
+	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(handler.SubmitAttendanceHanlder(db))))
+	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(handler.SubmitOvertimeHandler(db))))
+
+	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")
 	http.ListenAndServe(":8081", nil)
