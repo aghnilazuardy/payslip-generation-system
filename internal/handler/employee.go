@@ -20,6 +20,11 @@ type OvertimeRequest struct {
 	Hours int `json:"hours"`
 }
 
+type ReimbursementRequest struct {
+	Amount      int    `json:"amount"`
+	Description string `json:"description"`
+}
+
 func SubmitAttendanceHanlder(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// to check user role
@@ -116,5 +121,43 @@ func SubmitOvertimeHandler(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusCreated, gin.H{"message": "Overtime successfully submitted"})
+	}
+}
+
+func SubmitReimbursementHandler(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// to check user role
+		if middleware.GetUserRole(c) != "employee" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+
+		var req ReimbursementRequest
+		if err := c.ShouldBindJSON(&req); err != nil || req.Amount <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid reimbursement"})
+		}
+
+		userID, err := uuid.Parse(middleware.GetUserID(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+			return
+		}
+
+		reimbursement := model.Reimbursement{
+			UserID:      userID,
+			Amount:      req.Amount,
+			Description: req.Description,
+			CreatedBy:   userID,
+			RequestIP:   c.ClientIP(),
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+
+		if err := db.Create(&reimbursement); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create reimbursement"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"message": "Reimbursement successfully submitted"})
 	}
 }
