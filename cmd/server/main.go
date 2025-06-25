@@ -32,6 +32,11 @@ func main() {
 	admin.Use(middleware.AuthMiddleware())
 	admin.POST("/attendance-period", handler.CreateAttendancePeriodHandler(db))
 
+	employee := r.Group("/employee")
+	employee.Use(middleware.AuthMiddleware())
+	employee.POST("/attendance", handler.SubmitAttendanceHanlder(db))
+	employee.POST("/overtime", handler.SubmitOvertimeHandler(db))
+
 	log.Println("Server running on :8081")
 	r.Run(":8081")
 }

@@ -30,7 +30,6 @@ type Attendance struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
 	UserID    uuid.UUID
 	Date      time.Time `gorm:"type:date"`
-	Hours     int
 	CreatedBy uuid.UUID
 	RequestIP string
 	CreatedAt time.Time
