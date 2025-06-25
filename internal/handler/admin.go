@@ -23,14 +23,14 @@ type PayrollRequest struct {
 func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
 			return
 		}
 
 		if middleware.GetUserRole(r) != "admin" {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusForbidden)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
 			return
@@ -38,7 +38,7 @@ func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 
 		var req AttendancePeriodRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusBadRequest)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
 			return
@@ -47,7 +47,7 @@ func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 		startDate, err1 := time.Parse("2006-01-02", req.StartDate)
 		endDate, err2 := time.Parse("2006-01-02", req.EndDate)
 		if err1 != nil || err2 != nil || !startDate.Before(endDate) {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusBadRequest)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "invalid date range"})
 			return
@@ -55,7 +55,7 @@ func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 
 		userID, err := uuid.Parse(middleware.GetUserID(r))
 		if err != nil {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusInternalServerError)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "invalid user ID"})
 			return
@@ -71,7 +71,7 @@ func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 		}
 
 		if err := db.Create(&period).Error; err != nil {
-			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusInternalServerError)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "failed to create period"})
 			return
