@@ -21,31 +21,41 @@ type LoginResponse struct {
 func LoginHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
 			return
 		}
 
 		var req LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request", http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
 			return
 		}
 
 		var user model.User
 		err := db.Where("username = ?", req.Username).First(&user).Error
 		if err != nil {
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
 			return
 		}
 
 		if !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
 			return
 		}
 
 		token, err := utils.GenerateToken(user.ID.String(), user.Role)
 		if err != nil {
-			http.Error(w, "failed to generate token", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate token"})
 			return
 		}
 
