@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"os"
-	"payslip-generation-system/internal/seed"
+	"payslip-generation-system/seed"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
