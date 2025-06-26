@@ -1,49 +1,55 @@
 package middleware
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"payslip-generation-system/internal/helper"
 	"payslip-generation-system/utils"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
-func AuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed token"})
+type key string
+
+const (
+	UserIDKey key = "user_id"
+	RoleKey   key = "role"
+)
+
+func AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "missing or malformed token", nil, nil))
 			return
 		}
 
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 		userID, role, err := utils.ParseToken(tokenStr)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "unauthorized", nil, nil))
 			return
 		}
 
 		// Store in context
-		c.Set("user_id", userID)
-		c.Set("role", role)
-		c.Next()
-	}
+		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		ctx = context.WithValue(ctx, RoleKey, role)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
-func GetUserID(c *gin.Context) string {
-	if val, exists := c.Get("user_id"); exists {
-		if s, ok := val.(string); ok {
-			return s
-		}
+func GetUserID(r *http.Request) string {
+	val := r.Context().Value(UserIDKey)
+	if s, ok := val.(string); ok {
+		return s
 	}
 	return ""
 }
 
-func GetUserRole(c *gin.Context) string {
-	if val, exists := c.Get("role"); exists {
-		if s, ok := val.(string); ok {
-			return s
-		}
+func GetUserRole(r *http.Request) string {
+	val := r.Context().Value(RoleKey)
+	if s, ok := val.(string); ok {
+		return s
 	}
 	return ""
 }
