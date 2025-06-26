@@ -52,6 +52,7 @@ func main() {
 	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitAttendanceHanlder())))
 	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitOvertimeHandler())))
 	employeeMux.Handle("/reimbursement", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitReimbursementHandler())))
+	employeeMux.Handle("/payslip", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.GetPayslipHandler())))
 	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")
