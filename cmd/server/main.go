@@ -2,11 +2,12 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"payslip-generation-system/internal/handler"
 	"payslip-generation-system/internal/middleware"
+	"payslip-generation-system/internal/repository"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -24,18 +25,31 @@ func main() {
 		log.Fatal("failed to connect to database: ", err)
 	}
 
-	r := gin.Default()
+	// authorization route
+	userRepo := repository.NewUserRepository(db)
+	authHandler := handler.NewAuthHandler(userRepo)
 
-	r.POST("/login", handler.LoginHandler(db))
+	http.HandleFunc("/login", authHandler.LoginHandler())
 
-	admin := r.Group("/admin")
-	admin.Use(middleware.AuthMiddleware())
-	admin.POST("/attendance-period", handler.CreateAttendancePeriodHandler(db))
+	// admin route
+	adminRepo := repository.NewAdminRepository(db)
+	adminHandler := handler.NewAdminHandler(adminRepo)
 
-	employee := r.Group("/employee")
-	employee.Use(middleware.AuthMiddleware())
-	employee.POST("/attendance", handler.SubmitAttendanceHanlder(db))
-	employee.POST("/overtime", handler.SubmitOvertimeHandler(db))
+	adminMux := http.NewServeMux()
+	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
+	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
+	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
+
+	// employee route
+	employeeRepo := repository.NewEmployeeRepository(db)
+
+	employeeHandler := handler.NewEmployeeHandler(employeeRepo)
+
+	employeeMux := http.NewServeMux()
+	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitAttendanceHanlder())))
+	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitOvertimeHandler())))
+	employeeMux.Handle("/reimbursement", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitReimbursementHandler())))
+	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")
 	r.Run(":8081")

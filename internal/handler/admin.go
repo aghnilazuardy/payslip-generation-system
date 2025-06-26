@@ -1,14 +1,17 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"payslip-generation-system/internal/middleware"
 	"payslip-generation-system/internal/model"
+	"payslip-generation-system/internal/repository"
+	"payslip-generation-system/internal/service"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+	"github.com/redis/go-redis/v9/helper"
 )
 
 type AttendancePeriodRequest struct {
@@ -16,10 +19,28 @@ type AttendancePeriodRequest struct {
 	EndDate   string `json:"endDate"`
 }
 
-func CreateAttendancePeriodHandler(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if middleware.GetUserRole(c) != "admin" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+type PayrollRequest struct {
+	PeriodID string `json:"attendancePeriodId"`
+}
+
+type AdminHandler struct {
+	AdminRepo      repository.AdminRepository
+	PayrollService service.PayrollService
+}
+
+func NewAdminHandler(adminRepo repository.AdminRepository, payrollService service.PayrollService) *AdminHandler {
+	return &AdminHandler{AdminRepo: adminRepo, PayrollService: payrollService}
+}
+
+func (adh *AdminHandler) CreateAttendancePeriodHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		if middleware.GetUserRole(r) != "admin" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
 			return
 		}
 
@@ -51,11 +72,90 @@ func CreateAttendancePeriodHandler(db *gorm.DB) gin.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&period).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save"})
+		saveErr := adh.AdminRepo.SaveAttendancePeriod(&period)
+		if saveErr != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to create period", nil, nil))
 			return
 		}
 
-		c.JSON(http.StatusCreated, gin.H{"message": "Attendance successfully created"})
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "attendance period created successfully", nil, nil))
+	}
+}
+
+func (adh *AdminHandler) RunPayroll() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		if middleware.GetUserRole(r) != "admin" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
+			return
+		}
+
+		var req PayrollRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid JSON", nil, nil))
+			return
+		}
+
+		periodID, err := uuid.Parse(req.PeriodID)
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid period ID", nil, nil))
+			return
+		}
+
+		err = adh.PayrollService.RunPayroll(
+			periodID,
+			uuid.MustParse(middleware.GetUserID(r)),
+			r.RemoteAddr,
+			middleware.GetRequestID(r),
+		)
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, err.Error(), nil, nil))
+			return
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "payroll processed", nil, nil))
+	}
+}
+
+func (adh *AdminHandler) RunPayroll() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		if middleware.GetUserRole(r) != "admin" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
+			return
+		}
+
+		var req PayrollRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid JSON", nil, nil))
+			return
+		}
+
+		periodID, err := uuid.Parse(req.PeriodID)
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid period ID", nil, nil))
+			return
+		}
+
+		err = adh.PayrollService.RunPayroll(
+			periodID,
+			uuid.MustParse(middleware.GetUserID(r)),
+			r.RemoteAddr,
+			middleware.GetRequestID(r),
+		)
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, err.Error(), nil, nil))
+			return
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "payroll processed", nil, nil))
 	}
 }

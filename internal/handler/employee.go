@@ -1,18 +1,21 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"payslip-generation-system/internal/middleware"
 	"payslip-generation-system/internal/model"
+	"payslip-generation-system/internal/repository"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9/helper"
 	"gorm.io/gorm"
 )
 
@@ -23,6 +26,14 @@ type OvertimeRequest struct {
 type ReimbursementRequest struct {
 	Amount      int    `json:"amount"`
 	Description string `json:"description"`
+}
+
+type EmployeeHandler struct {
+	EmployeeRepo repository.EmployeeRepository
+}
+
+func NewEmployeeHandler(employeeRepo repository.EmployeeRepository) *EmployeeHandler {
+	return &EmployeeHandler{EmployeeRepo: employeeRepo}
 }
 
 func SubmitAttendanceHanlder(db *gorm.DB) gin.HandlerFunc {
@@ -58,9 +69,10 @@ func SubmitAttendanceHanlder(db *gorm.DB) gin.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&attendance).Error; err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				c.JSON(http.StatusConflict, gin.H{"error": "already submitted today"})
+		saveErr := emh.EmployeeRepo.SaveAttendance(&attendance)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
 			} else {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create attendance"})
 			}
@@ -111,9 +123,68 @@ func SubmitOvertimeHandler(db *gorm.DB) gin.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&overtime).Error; err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				c.JSON(http.StatusConflict, gin.H{"error": "already submitted today"})
+		saveErr := emh.EmployeeRepo.SaveOvertime(&overtime)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
+			} else {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to submit overtime", nil, nil))
+			}
+			return
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "overtime submitted successfully", nil, nil))
+	}
+}
+
+func (emh *EmployeeHandler) SubmitReimbursementHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		// to check user role
+		if middleware.GetUserRole(r) != "employee" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
+			return
+		}
+
+		var req ReimbursementRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
+			return
+		}
+
+		userID, err := uuid.Parse(middleware.GetUserID(r))
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "invalid user ID", nil, nil))
+			return
+		}
+
+		hourNow := time.Now().Hour()
+		fmt.Printf("%v\n", hourNow)
+		endOfWorkingHour, _ := strconv.Atoi(os.Getenv("WORK_HOUR_END"))
+		fmt.Printf("%v-%v\n", hourNow, endOfWorkingHour)
+		if hourNow < endOfWorkingHour {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "overtime can only be submitted after 5PM", nil, nil))
+			return
+		}
+
+		reimburse := model.Reimbursement{
+			UserID:      userID,
+			Amount:      req.Amount,
+			Description: req.Description,
+			CreatedBy:   userID,
+			RequestIP:   r.RemoteAddr,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+
+		saveErr := emh.EmployeeRepo.SaveReimbursement(&reimburse)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
 			} else {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create attendance"})
 			}
