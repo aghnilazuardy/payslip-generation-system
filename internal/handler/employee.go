@@ -21,13 +21,17 @@ type OvertimeRequest struct {
 	Hours int `json:"hours"`
 }
 
-type EmployeeHandler struct {
-	AttendanceRepo repository.AttendanceRepository
-	OvertimeRepo   repository.OvertimeRepository
+type ReimbursementRequest struct {
+	Amount      int    `json:"amount"`
+	Description string `json:"description"`
 }
 
-func NewEmployeeHandler(attendanceRepo repository.AttendanceRepository, overtimeRepo repository.OvertimeRepository) *EmployeeHandler {
-	return &EmployeeHandler{AttendanceRepo: attendanceRepo, OvertimeRepo: overtimeRepo}
+type EmployeeHandler struct {
+	EmployeeRepo repository.EmployeeRepository
+}
+
+func NewEmployeeHandler(employeeRepo repository.EmployeeRepository) *EmployeeHandler {
+	return &EmployeeHandler{EmployeeRepo: employeeRepo}
 }
 
 func (emh *EmployeeHandler) SubmitAttendanceHanlder() http.HandlerFunc {
@@ -68,7 +72,7 @@ func (emh *EmployeeHandler) SubmitAttendanceHanlder() http.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		saveErr := emh.AttendanceRepo.SaveAttendance(&attendance)
+		saveErr := emh.EmployeeRepo.SaveAttendance(&attendance)
 		if saveErr != nil {
 			if strings.Contains(saveErr.Error(), "duplicate key") {
 				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
@@ -128,7 +132,65 @@ func (emh *EmployeeHandler) SubmitOvertimeHandler() http.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		saveErr := emh.OvertimeRepo.SaveOvertime(&overtime)
+		saveErr := emh.EmployeeRepo.SaveOvertime(&overtime)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
+			} else {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to submit overtime", nil, nil))
+			}
+			return
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "overtime submitted successfully", nil, nil))
+	}
+}
+
+func (emh *EmployeeHandler) SubmitReimbursementHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		// to check user role
+		if middleware.GetUserRole(r) != "employee" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
+			return
+		}
+
+		var req ReimbursementRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
+			return
+		}
+
+		userID, err := uuid.Parse(middleware.GetUserID(r))
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "invalid user ID", nil, nil))
+			return
+		}
+
+		hourNow := time.Now().Hour()
+		fmt.Printf("%v\n", hourNow)
+		endOfWorkingHour, _ := strconv.Atoi(os.Getenv("WORK_HOUR_END"))
+		fmt.Printf("%v-%v\n", hourNow, endOfWorkingHour)
+		if hourNow < endOfWorkingHour {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "overtime can only be submitted after 5PM", nil, nil))
+			return
+		}
+
+		reimburse := model.Reimbursement{
+			UserID:      userID,
+			Amount:      req.Amount,
+			Description: req.Description,
+			CreatedBy:   userID,
+			RequestIP:   r.RemoteAddr,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+
+		saveErr := emh.EmployeeRepo.SaveReimbursement(&reimburse)
 		if saveErr != nil {
 			if strings.Contains(saveErr.Error(), "duplicate key") {
 				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))

@@ -71,7 +71,7 @@ type Payslip struct {
 	PayrollID          uuid.UUID
 	UserID             uuid.UUID
 	BaseSalary         int
-	AttendaceDays      int
+	AttendanceDays     int
 	ProratedSalary     int
 	OvertimeHours      int
 	OvertimePay        int
