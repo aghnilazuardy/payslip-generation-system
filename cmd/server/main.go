@@ -7,6 +7,7 @@ import (
 	"payslip-generation-system/internal/handler"
 	"payslip-generation-system/internal/middleware"
 	"payslip-generation-system/internal/repository"
+	"payslip-generation-system/internal/service"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
@@ -33,11 +34,13 @@ func main() {
 
 	// admin route
 	adminRepo := repository.NewAdminRepository(db)
-	adminHandler := handler.NewAdminHandler(adminRepo)
+	payrollRepo := repository.NewPayrollRepository(db)
+	payrollService := service.NewPayrollService(payrollRepo)
+	adminHandler := handler.NewAdminHandler(adminRepo, payrollService)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
-	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
+	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.RunPayroll())))
 	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
 
 	// employee route
