@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"payslip-generation-system/internal/helper"
 	"payslip-generation-system/internal/middleware"
@@ -20,6 +21,21 @@ type AttendancePeriodRequest struct {
 
 type PayrollRequest struct {
 	PeriodID string `json:"attendancePeriodId"`
+}
+
+type SummaryRequest struct {
+	PayrollID string `json:"payrollID"`
+}
+
+type SummaryResponse struct {
+	EmployeeSummaries []EmployeeSummary `json:"employee_summaries"`
+	TotalTakeHome     int               `json:"total_take_home"`
+}
+
+type EmployeeSummary struct {
+	UserID      uuid.UUID `json:"user_id"`
+	Username    string    `json:"username"`
+	TakeHomePay int       `json:"take_home_pay"`
 }
 
 type AdminHandler struct {
@@ -117,5 +133,51 @@ func (adh *AdminHandler) RunPayroll() http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "payroll processed", nil, nil))
+	}
+}
+
+func (adh *AdminHandler) GetPayslipSummaryHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		if middleware.GetUserRole(r) != "admin" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
+			return
+		}
+
+		var req SummaryRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
+			return
+		}
+		defer r.Body.Close()
+
+		rows, err := adh.AdminRepo.GetPayslipSummary(uuid.MustParse(req.PayrollID))
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusNotFound, "summary not found", nil, nil))
+			return
+		}
+		fmt.Printf("%v\n", rows)
+
+		summaries := []EmployeeSummary{}
+		total := 0
+		for _, row := range rows {
+			summaries = append(summaries, EmployeeSummary{
+				UserID:      row.UserID,
+				Username:    row.Username,
+				TakeHomePay: row.TakeHomePay,
+			})
+			total += row.TakeHomePay
+		}
+
+		resp := SummaryResponse{
+			EmployeeSummaries: summaries,
+			TotalTakeHome:     total,
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusOK, "success get payslip summary", resp, nil))
 	}
 }

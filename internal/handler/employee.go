@@ -27,7 +27,7 @@ type ReimbursementRequest struct {
 }
 
 type PayslipRequest struct {
-	PayrollID uuid.UUID `json:"payrollID"`
+	PayrollID string `json:"payrollID"`
 }
 
 type PayslipResponse struct {
@@ -220,6 +220,11 @@ func (emh *EmployeeHandler) SubmitReimbursementHandler() http.HandlerFunc {
 
 func (emh *EmployeeHandler) GetPayslipHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
 		userID := middleware.GetUserID(r)
 		if userID == "" {
 			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "unauthorized", nil, nil))
@@ -233,7 +238,7 @@ func (emh *EmployeeHandler) GetPayslipHandler() http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		payslip, err := emh.EmployeeRepo.GetPayslip(uuid.MustParse(userID), req.PayrollID)
+		payslip, err := emh.EmployeeRepo.GetPayslip(uuid.MustParse(userID), uuid.MustParse(req.PayrollID))
 		if err != nil {
 			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusNotFound, "payslip not found", nil, nil))
 			return

@@ -41,6 +41,7 @@ func main() {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
 	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.RunPayroll())))
+	adminMux.Handle("/payslip-summary", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.GetPayslipSummaryHandler())))
 	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
 
 	// employee route
