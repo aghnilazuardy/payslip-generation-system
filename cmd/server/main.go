@@ -32,21 +32,23 @@ func main() {
 	http.HandleFunc("/login", authHandler.LoginHandler())
 
 	// admin route
-	attendancePeriodRepo := repository.NewAttendancePeriodRepository(db)
-	adminHandler := handler.NewAdminHandler(attendancePeriodRepo)
+	adminRepo := repository.NewAdminRepository(db)
+	adminHandler := handler.NewAdminHandler(adminRepo)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
+	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
 	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
 
 	// employee route
-	attendanceRepo := repository.NewAttendanceRepository(db)
-	overtimeRepo := repository.NewOvertimeRepository(db)
-	employeeHandler := handler.NewEmployeeHandler(attendanceRepo, overtimeRepo)
+	employeeRepo := repository.NewEmployeeRepository(db)
+
+	employeeHandler := handler.NewEmployeeHandler(employeeRepo)
 
 	employeeMux := http.NewServeMux()
 	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitAttendanceHanlder())))
 	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitOvertimeHandler())))
+	employeeMux.Handle("/reimbursement", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitReimbursementHandler())))
 	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")
