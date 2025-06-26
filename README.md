@@ -21,6 +21,9 @@ Update `.env` with your PostgreSQL credentials:
 
 ```env
 DATABASE_DSN=postgres://user:password@localhost:5432/payslip?sslmode=disable
+JWT_SECRET=your-jwt-secret
+WORK_HOUR_START=9
+WORK_HOUR_END=17
 ```
 
 ### Run with Docker
