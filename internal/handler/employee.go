@@ -6,34 +6,40 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"payslip-generation-system/internal/helper"
 	"payslip-generation-system/internal/middleware"
 	"payslip-generation-system/internal/model"
+	"payslip-generation-system/internal/repository"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type OvertimeRequest struct {
 	Hours int `json:"hours"`
 }
 
-func SubmitAttendanceHanlder(db *gorm.DB) http.HandlerFunc {
+type EmployeeHandler struct {
+	AttendanceRepo repository.AttendanceRepository
+	OvertimeRepo   repository.OvertimeRepository
+}
+
+func NewEmployeeHandler(attendanceRepo repository.AttendanceRepository, overtimeRepo repository.OvertimeRepository) *EmployeeHandler {
+	return &EmployeeHandler{AttendanceRepo: attendanceRepo, OvertimeRepo: overtimeRepo}
+}
+
+func (emh *EmployeeHandler) SubmitAttendanceHanlder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
 			return
 		}
 
 		// to check user role
 		if middleware.GetUserRole(r) != "employee" {
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
 			return
 		}
 
@@ -41,17 +47,13 @@ func SubmitAttendanceHanlder(db *gorm.DB) http.HandlerFunc {
 		today := time.Now().Truncate(24 * time.Hour)
 		weekday := today.Weekday()
 		if weekday == time.Saturday || weekday == time.Sunday {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "cannot submit on weekend"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "cannot submit on weekend", nil, nil))
 			return
 		}
 
 		userID, err := uuid.Parse(middleware.GetUserID(r))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid user ID"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "invalid user ID", nil, nil))
 			return
 		}
 
@@ -66,55 +68,42 @@ func SubmitAttendanceHanlder(db *gorm.DB) http.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&attendance).Error; err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				w.WriteHeader(http.StatusConflict)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"error": "already submitted today"})
+		saveErr := emh.AttendanceRepo.SaveAttendance(&attendance)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
 			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"error": "failed to create attendance"})
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to create attendance", nil, nil))
 			}
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "attendance submitted successfully"})
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "attendance submitted successfully", nil, nil))
 	}
 }
 
-func SubmitOvertimeHandler(db *gorm.DB) http.HandlerFunc {
+func (emh *EmployeeHandler) SubmitOvertimeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
 			return
 		}
 
 		// to check user role
 		if middleware.GetUserRole(r) != "employee" {
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
 			return
 		}
 
 		var req OvertimeRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
 			return
 		}
 
 		userID, err := uuid.Parse(middleware.GetUserID(r))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid user ID"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "invalid user ID", nil, nil))
 			return
 		}
 
@@ -123,9 +112,7 @@ func SubmitOvertimeHandler(db *gorm.DB) http.HandlerFunc {
 		endOfWorkingHour, _ := strconv.Atoi(os.Getenv("WORK_HOUR_END"))
 		fmt.Printf("%v-%v\n", hourNow, endOfWorkingHour)
 		if hourNow < endOfWorkingHour {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "overtime can only be submitted after 5PM"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "overtime can only be submitted after 5PM", nil, nil))
 			return
 		}
 
@@ -141,21 +128,16 @@ func SubmitOvertimeHandler(db *gorm.DB) http.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&overtime).Error; err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				w.WriteHeader(http.StatusConflict)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"error": "already submitted today"})
+		saveErr := emh.OvertimeRepo.SaveOvertime(&overtime)
+		if saveErr != nil {
+			if strings.Contains(saveErr.Error(), "duplicate key") {
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusConflict, "already submitted today", nil, nil))
 			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{"error": "failed to submit overtime"})
+				json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to submit overtime", nil, nil))
 			}
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "overtime submitted successfully"})
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "overtime submitted successfully", nil, nil))
 	}
 }

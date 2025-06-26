@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+*.air.toml
 
 # Test binary, built with `go test -c`
 *.test
@@ -19,6 +20,9 @@ profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+#file path
+tmp/
 
 # Go workspace file
 go.work

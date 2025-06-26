@@ -6,6 +6,7 @@ import (
 	"os"
 	"payslip-generation-system/internal/handler"
 	"payslip-generation-system/internal/middleware"
+	"payslip-generation-system/internal/repository"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
@@ -24,19 +25,28 @@ func main() {
 		log.Fatal("failed to connect to database: ", err)
 	}
 
-	http.HandleFunc("/login", handler.LoginHandler(db))
+	// authorization route
+	userRepo := repository.NewUserRepository(db)
+	authHandler := handler.NewAuthHandler(userRepo)
 
-	// admin router
+	http.HandleFunc("/login", authHandler.LoginHandler())
+
+	// admin route
+	attendancePeriodRepo := repository.NewAttendancePeriodRepository(db)
+	adminHandler := handler.NewAdminHandler(attendancePeriodRepo)
+
 	adminMux := http.NewServeMux()
-	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(handler.CreateAttendancePeriodHandler(db))))
-
+	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
 	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
 
-	// employee router
-	employeeMux := http.NewServeMux()
-	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(handler.SubmitAttendanceHanlder(db))))
-	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(handler.SubmitOvertimeHandler(db))))
+	// employee route
+	attendanceRepo := repository.NewAttendanceRepository(db)
+	overtimeRepo := repository.NewOvertimeRepository(db)
+	employeeHandler := handler.NewEmployeeHandler(attendanceRepo, overtimeRepo)
 
+	employeeMux := http.NewServeMux()
+	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitAttendanceHanlder())))
+	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitOvertimeHandler())))
 	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")

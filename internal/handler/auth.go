@@ -3,10 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"payslip-generation-system/internal/model"
+	"payslip-generation-system/internal/helper"
+	"payslip-generation-system/internal/repository"
 	"payslip-generation-system/utils"
-
-	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
@@ -18,48 +17,44 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
-func LoginHandler(db *gorm.DB) http.HandlerFunc {
+type AuthHandler struct {
+	UserRepo repository.UserRepository
+}
+
+func NewAuthHandler(userRepo repository.UserRepository) *AuthHandler {
+	return &AuthHandler{UserRepo: userRepo}
+}
+
+func (lh *AuthHandler) LoginHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
 			return
 		}
 
 		var req LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
 			return
 		}
 
-		var user model.User
-		err := db.Where("username = ?", req.Username).First(&user).Error
+		user, err := lh.UserRepo.FindByUsername(req.Username)
 		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "invalid credentials", nil, nil))
 			return
 		}
 
 		if !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "invalid credentials", nil, nil))
 			return
 		}
 
 		token, err := utils.GenerateToken(user.ID.String(), user.Role)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate token"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to generate token", nil, nil))
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(LoginResponse{Token: token})
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusOK, "login success", LoginResponse{Token: token}, nil))
 	}
 }

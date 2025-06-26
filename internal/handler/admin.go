@@ -3,12 +3,13 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"payslip-generation-system/internal/helper"
 	"payslip-generation-system/internal/middleware"
 	"payslip-generation-system/internal/model"
+	"payslip-generation-system/internal/repository"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type AttendancePeriodRequest struct {
@@ -20,44 +21,42 @@ type PayrollRequest struct {
 	PeriodID string `json:"attendancePeriodId"`
 }
 
-func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
+type AdminHandler struct {
+	AttendancePeriodRepo repository.AttendancePeriodRepository
+}
+
+func NewAdminHandler(attendancePeriodRepo repository.AttendancePeriodRepository) *AdminHandler {
+	return &AdminHandler{AttendancePeriodRepo: attendancePeriodRepo}
+}
+
+func (adh *AdminHandler) CreateAttendancePeriodHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
 			return
 		}
 
 		if middleware.GetUserRole(r) != "admin" {
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusForbidden, "forbidden", nil, nil))
 			return
 		}
 
 		var req AttendancePeriodRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
 			return
 		}
 
 		startDate, err1 := time.Parse("2006-01-02", req.StartDate)
 		endDate, err2 := time.Parse("2006-01-02", req.EndDate)
 		if err1 != nil || err2 != nil || !startDate.Before(endDate) {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid date range"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid date range", nil, nil))
 			return
 		}
 
 		userID, err := uuid.Parse(middleware.GetUserID(r))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid user ID"})
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "invalid user ID", nil, nil))
 			return
 		}
 
@@ -70,15 +69,12 @@ func CreateAttendancePeriodHandler(db *gorm.DB) http.HandlerFunc {
 			UpdatedAt: time.Now(),
 		}
 
-		if err := db.Create(&period).Error; err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to create period"})
+		saveErr := adh.AttendancePeriodRepo.SaveAttendancePeriod(&period)
+		if saveErr != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusInternalServerError, "failed to create period", nil, nil))
 			return
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "attendance period created successfully"})
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "attendance period created successfully", nil, nil))
 	}
 }
