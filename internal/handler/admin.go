@@ -105,7 +105,7 @@ func (adh *AdminHandler) RunPayroll() http.HandlerFunc {
 			return
 		}
 
-		err = adh.PayrollService.RunPayroll(
+		err = adh.PayrollService.ProcessPayroll(
 			periodID,
 			uuid.MustParse(middleware.GetUserID(r)),
 			r.RemoteAddr,
