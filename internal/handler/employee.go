@@ -26,6 +26,20 @@ type ReimbursementRequest struct {
 	Description string `json:"description"`
 }
 
+type PayslipRequest struct {
+	PayrollID string `json:"payrollID"`
+}
+
+type PayslipResponse struct {
+	BaseSalary         int `json:"baseSalary"`
+	AttendanceDays     int `json:"attendanceDays"`
+	ProratedSalary     int `json:"proratedSalary"`
+	OvertimeHours      int `json:"overtimeHours"`
+	OvertimePay        int `json:"overtimePay"`
+	ReimbursementTotal int `json:"reimbursementTotal"`
+	TakeHomePay        int `json:"takeHomePay"`
+}
+
 type EmployeeHandler struct {
 	EmployeeRepo repository.EmployeeRepository
 }
@@ -201,5 +215,45 @@ func (emh *EmployeeHandler) SubmitReimbursementHandler() http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusCreated, "overtime submitted successfully", nil, nil))
+	}
+}
+
+func (emh *EmployeeHandler) GetPayslipHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusMethodNotAllowed, "method not allowed", nil, nil))
+			return
+		}
+
+		userID := middleware.GetUserID(r)
+		if userID == "" {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusUnauthorized, "unauthorized", nil, nil))
+			return
+		}
+
+		var req PayslipRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusBadRequest, "invalid request", nil, nil))
+			return
+		}
+		defer r.Body.Close()
+
+		payslip, err := emh.EmployeeRepo.GetPayslip(uuid.MustParse(userID), uuid.MustParse(req.PayrollID))
+		if err != nil {
+			json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusNotFound, "payslip not found", nil, nil))
+			return
+		}
+
+		resp := PayslipResponse{
+			BaseSalary:         payslip.BaseSalary,
+			AttendanceDays:     payslip.AttendanceDays,
+			ProratedSalary:     payslip.ProratedSalary,
+			OvertimeHours:      payslip.OvertimeHours,
+			OvertimePay:        payslip.OvertimePay,
+			ReimbursementTotal: payslip.ReimbursementTotal,
+			TakeHomePay:        payslip.TakeHomePay,
+		}
+
+		json.NewEncoder(w).Encode(helper.WriteJSONResponse(w, http.StatusOK, "payslip has generated successfully", resp, nil))
 	}
 }

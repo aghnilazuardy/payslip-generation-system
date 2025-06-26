@@ -89,3 +89,9 @@ type AuditLog struct {
 	RequestID   string
 	Timestamp   time.Time
 }
+
+type EmployeePayslipSummary struct {
+	UserID      uuid.UUID
+	Username    string
+	TakeHomePay int
+}

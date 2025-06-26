@@ -41,6 +41,7 @@ func main() {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/attendance-period", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.CreateAttendancePeriodHandler())))
 	adminMux.Handle("/payroll-run", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.RunPayroll())))
+	adminMux.Handle("/payslip-summary", middleware.AuthMiddleware(http.HandlerFunc(adminHandler.GetPayslipSummaryHandler())))
 	http.Handle("/admin/", http.StripPrefix("/admin", adminMux))
 
 	// employee route
@@ -52,6 +53,7 @@ func main() {
 	employeeMux.Handle("/attendance", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitAttendanceHanlder())))
 	employeeMux.Handle("/overtime", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitOvertimeHandler())))
 	employeeMux.Handle("/reimbursement", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.SubmitReimbursementHandler())))
+	employeeMux.Handle("/payslip", middleware.AuthMiddleware(http.HandlerFunc(employeeHandler.GetPayslipHandler())))
 	http.Handle("/employee/", http.StripPrefix("/employee", employeeMux))
 
 	log.Println("Server running on :8081")
